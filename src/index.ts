@@ -12,10 +12,23 @@ async function app() {
   const nowDate = new Date();
   const padNum = (num: number) => num.toString().padStart(2, '0');
 
-  const cagr = (start: number, end: number) => {
+  // const cagr = (start: number, end: number) => {
+  //   // CAGR = Compound Annual Growth Rate
+  //   // https://www.investopedia.com/terms/c/cagr.asp
+  //   return Math.round((Math.pow(end / start, 0.5) - 1) * 100);
+  // };
+
+  const cagr = (start: number, end: number, number: number) => {
     // CAGR = Compound Annual Growth Rate
     // https://www.investopedia.com/terms/c/cagr.asp
-    return Math.round((Math.pow(end / start, 0.5) - 1) * 100);
+    // http://fortmarinus.com/blog/1214/
+
+    const step1 = end - start + Math.abs(start);
+    const step2 = step1 / Math.abs(start);
+    const step3 = Math.pow(step2, 1 / number);
+    const step4 = (step3 - 1) * 100;
+
+    return Math.round(step4);
   };
 
   const nowDateStr = `${nowDate.getFullYear()}.${padNum(
@@ -50,41 +63,46 @@ async function app() {
   );
 
   // CAGR = Compound Annual Growth Rate
-  const revenue10CAGR = cagr(revenue10[0], revenue10[9]);
-  const revenue05CAGR = cagr(revenue10[4], revenue10[9]);
-  const revenue01CAGR = cagr(revenue10[8], revenue10[9]);
+  const revenue10CAGR = cagr(revenue10[0], revenue10[9], 10);
+  const revenue05CAGR = cagr(revenue10[4], revenue10[9], 5);
+  const revenue01CAGR = cagr(revenue10[8], revenue10[9], 2);
 
-  const dilutedEPS10CAGR = cagr(dilutedEPS10[0], dilutedEPS10[9]);
-  const dilutedEPS05CAGR = cagr(dilutedEPS10[4], dilutedEPS10[9]);
-  const dilutedEPS01CAGR = cagr(dilutedEPS10[8], dilutedEPS10[9]);
+  const dilutedEPS10CAGR = cagr(dilutedEPS10[0], dilutedEPS10[9], 10);
+  const dilutedEPS05CAGR = cagr(dilutedEPS10[4], dilutedEPS10[9], 5);
+  const dilutedEPS01CAGR = cagr(dilutedEPS10[8], dilutedEPS10[9], 2);
 
-  const equity10CAGR = cagr(equity10[0], equity10[9]);
-  const equity05CAGR = cagr(equity10[4], equity10[9]);
-  const equity01CAGR = cagr(equity10[8], equity10[9]);
+  const equity10CAGR = cagr(equity10[0], equity10[9], 10);
+  const equity05CAGR = cagr(equity10[4], equity10[9], 5);
+  const equity01CAGR = cagr(equity10[8], equity10[9], 2);
 
-  const fcf10CAGR = cagr(fcf10[0], fcf10[9]);
-  const fcf05CAGR = cagr(fcf10[4], fcf10[9]);
-  const fcf01CAGR = cagr(fcf10[8], fcf10[9]);
+  const fcf10CAGR = cagr(fcf10[0], fcf10[9], 10);
+  const fcf05CAGR = cagr(fcf10[4], fcf10[9], 5);
+  const fcf01CAGR = cagr(fcf10[8], fcf10[9], 2);
 
   const revenueIncreasingScore = scoreIncreasing(revenue10);
   const dilutedIncreasingScore = scoreIncreasing(dilutedEPS10);
   const equityIncreasingScore = scoreIncreasing(equity10);
   const fcfSIncreasingcore = scoreIncreasing(fcf10);
 
-  const revenueCAGRScore = scoreCAGR([
-    revenue10CAGR,
-    revenue05CAGR,
-    revenue01CAGR
-  ]);
-  const dilutedEPSCAGRScore = scoreCAGR([
-    dilutedEPS10CAGR,
-    dilutedEPS05CAGR,
-    dilutedEPS01CAGR
-  ]);
+  const revenueCAGRScore = scoreCAGR(
+    [revenue10CAGR, revenue05CAGR, revenue01CAGR],
+    1
+  );
+  const dilutedEPSCAGRScore = scoreCAGR(
+    [dilutedEPS10CAGR, dilutedEPS05CAGR, dilutedEPS01CAGR],
+    1
+  );
 
-  const equityCAGRScore = scoreCAGR([equity10CAGR, equity05CAGR, equity01CAGR]);
+  // Equity growth is the strongest value for determining a good moat.
+  // Therefor we give this a boost of 1.5
+  const equityCAGRScore = scoreCAGR(
+    [equity10CAGR, equity05CAGR, equity01CAGR],
+    1.5
+  );
 
-  const fcfCAGRScore = scoreCAGR([fcf10CAGR, fcf05CAGR, fcf01CAGR]);
+  // FCF is the second strongest value for a moat
+  // Therefor we give this a boost of 1.2
+  const fcfCAGRScore = scoreCAGR([fcf10CAGR, fcf05CAGR, fcf01CAGR], 1.2);
 
   let moat = {
     type: 'moat',
@@ -102,10 +120,10 @@ async function app() {
     equityIncreasingScore,
     fcfSIncreasingcore,
     score:
-      revenueCAGRScore.totalScore +
-      dilutedEPSCAGRScore.totalScore +
-      equityCAGRScore.totalScore +
-      fcfCAGRScore.totalScore +
+      revenueCAGRScore.totalScoreAdjusted +
+      dilutedEPSCAGRScore.totalScoreAdjusted +
+      equityCAGRScore.totalScoreAdjusted +
+      fcfCAGRScore.totalScoreAdjusted +
       revenueIncreasingScore +
       dilutedIncreasingScore +
       equityIncreasingScore +
@@ -128,11 +146,13 @@ interface IScoreCAGR {
   tenYearScore: number;
   fiveYearScore: number;
   oneYearScore: number;
+  weightAdjustment: number;
 
   totalScore: number;
+  totalScoreAdjusted: number;
 }
 
-function scoreCAGR(values: number[]): IScoreCAGR {
+function scoreCAGR(values: number[], weightAdjustment: number): IScoreCAGR {
   const [val10, val05, val01] = values;
 
   // We want all to be over 10%
@@ -141,14 +161,19 @@ function scoreCAGR(values: number[]): IScoreCAGR {
   const tenYearScore = Math.floor(val10 / 10);
   const fiveYearScore = Math.floor(val05 / 10);
   const oneYearScore = Math.floor(val01 / 10);
-  const totalScore = tenYearScore + fiveYearScore + oneYearScore;
+  const totalScore = Math.floor(tenYearScore + fiveYearScore + oneYearScore);
+  const totalScoreAdjusted = Math.floor(
+    (tenYearScore + fiveYearScore + oneYearScore) * weightAdjustment
+  );
 
   return {
     basis: [...values],
+    weightAdjustment,
     tenYearScore,
     fiveYearScore,
     oneYearScore,
-    totalScore
+    totalScore,
+    totalScoreAdjusted
   };
 }
 
@@ -179,18 +204,6 @@ function add_values(values1: number[], values2: number[]): number[] {
   let result: number[] = [];
   for (let i = 0; i < values1.length; i++) {
     result = [...result, values1[i] + values2[i]];
-  }
-  return result;
-}
-
-function sub_values(values1: number[], values2: number[]): number[] {
-  if (values1.length !== values2.length) {
-    throw new Error('values have different lengths');
-  }
-
-  let result: number[] = [];
-  for (let i = 0; i < values1.length; i++) {
-    result = [...result, values1[i] - values2[i]];
   }
   return result;
 }
