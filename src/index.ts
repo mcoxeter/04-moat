@@ -1,35 +1,16 @@
 #!/usr/bin/env node
-import { on } from 'events';
 import fs from 'fs';
+const config = require('./config.json');
 
 async function app() {
   var myArgs = process.argv.slice(2);
   const symbol = myArgs[0];
 
-  const path = `C:/Users/Mike/OneDrive - Digital Sparcs/Investing/Value Investing Process/Business analysis/Evaluation/${symbol}/`;
+  const path = `${config.path}/${symbol}`;
 
-  const requiredPaths = [path, `${path}/moat`];
+  const requiredPaths = [path, `${path}/04-moat`];
   const nowDate = new Date();
   const padNum = (num: number) => num.toString().padStart(2, '0');
-
-  // const cagr = (start: number, end: number) => {
-  //   // CAGR = Compound Annual Growth Rate
-  //   // https://www.investopedia.com/terms/c/cagr.asp
-  //   return Math.round((Math.pow(end / start, 0.5) - 1) * 100);
-  // };
-
-  const cagr = (start: number, end: number, number: number) => {
-    // CAGR = Compound Annual Growth Rate
-    // https://www.investopedia.com/terms/c/cagr.asp
-    // http://fortmarinus.com/blog/1214/
-
-    const step1 = end - start + Math.abs(start);
-    const step2 = step1 / Math.abs(start);
-    const step3 = Math.pow(step2, 1 / number);
-    const step4 = (step3 - 1) * 100;
-
-    return Math.round(step4);
-  };
 
   const nowDateStr = `${nowDate.getFullYear()}.${padNum(
     nowDate.getMonth() + 1
@@ -42,98 +23,81 @@ async function app() {
   });
 
   const lastDataFile = fs
-    .readdirSync(`${path}/core`)
+    .readdirSync(`${path}/01-data`)
     .filter((file) => file.endsWith('.json'))
     .sort((a, b) => b.localeCompare(a))
     .find(() => true);
 
-  const stats = require(`${path}/core/${lastDataFile}`);
+  const stats = require(`${path}/01-data/${lastDataFile}`);
   const annual = stats.data.data.financials.annual;
   if (annual.revenue.length < 10) {
     throw new Error('Company has not been reporting results for 10 years');
   }
 
-  const revenue10 = lastNFromArray(10, annual.revenue);
-  const dilutedEPS10 = lastNFromArray(10, annual.eps_diluted);
-  const equity10 = lastNFromArray(10, annual.total_equity);
+  const periods: number[] = lastNFromArray<string>(
+    10,
+    stats.data.data.financials.annual.period_end_date
+  )
+    .map((x) => x.split('-')[0])
+    .map((x) => Number(x));
+
+  const revenue10 = lastNFromArray<number>(10, annual.revenue);
+  const dilutedEPS10 = lastNFromArray<number>(10, annual.eps_diluted);
+  const equity10 = lastNFromArray<number>(10, annual.total_equity);
 
   const fcf10 = add_values(
     lastNFromArray(10, annual.cf_cfo),
-    lastNFromArray(10, annual.ppe_net)
+    lastNFromArray(10, annual.cfi_ppe_purchases)
   );
 
-  // CAGR = Compound Annual Growth Rate
-  const revenue10CAGR = cagr(revenue10[0], revenue10[9], 10);
-  const revenue05CAGR = cagr(revenue10[4], revenue10[9], 5);
-  const revenue01CAGR = cagr(revenue10[8], revenue10[9], 2);
-
-  const dilutedEPS10CAGR = cagr(dilutedEPS10[0], dilutedEPS10[9], 10);
-  const dilutedEPS05CAGR = cagr(dilutedEPS10[4], dilutedEPS10[9], 5);
-  const dilutedEPS01CAGR = cagr(dilutedEPS10[8], dilutedEPS10[9], 2);
-
-  const equity10CAGR = cagr(equity10[0], equity10[9], 10);
-  const equity05CAGR = cagr(equity10[4], equity10[9], 5);
-  const equity01CAGR = cagr(equity10[8], equity10[9], 2);
-
-  const fcf10CAGR = cagr(fcf10[0], fcf10[9], 10);
-  const fcf05CAGR = cagr(fcf10[4], fcf10[9], 5);
-  const fcf01CAGR = cagr(fcf10[8], fcf10[9], 2);
-
-  const revenueIncreasingScore = scoreIncreasing(revenue10);
-  const dilutedIncreasingScore = scoreIncreasing(dilutedEPS10);
-  const equityIncreasingScore = scoreIncreasing(equity10);
-  const fcfSIncreasingcore = scoreIncreasing(fcf10);
-
-  const revenueCAGRScore = scoreCAGR(
-    [revenue10CAGR, revenue05CAGR, revenue01CAGR],
-    1
-  );
-  const dilutedEPSCAGRScore = scoreCAGR(
-    [dilutedEPS10CAGR, dilutedEPS05CAGR, dilutedEPS01CAGR],
+  const revenueAnalysis = analyseCAGR(
+    'Revenue Compound Annual Growth Rate(CAGR).',
+    periods,
+    revenue10,
     1
   );
 
-  // Equity growth is the strongest value for determining a good moat.
-  // Therefor we give this a boost of 1.5
-  const equityCAGRScore = scoreCAGR(
-    [equity10CAGR, equity05CAGR, equity01CAGR],
+  const dilutedEPSAnalysis = analyseCAGR(
+    'Diluted EPS Compound Annual Growth Rate(CAGR).',
+    periods,
+    dilutedEPS10,
+    1
+  );
+
+  const equityAnalysis = analyseCAGR(
+    'Equity Compound Annual Growth Rate(CAGR). Found on the balance sheet. This is considered the most important indicator of a moat.',
+    periods,
+    equity10,
+    2
+  );
+
+  const fcfAnalysis = analyseCAGR(
+    'Free Cash Flow(FCF) Compound Annual Growth Rate(CAGR). This is considered the second most important indicator of a moat.',
+    periods,
+    fcf10,
     1.5
   );
 
-  // FCF is the second strongest value for a moat
-  // Therefor we give this a boost of 1.2
-  const fcfCAGRScore = scoreCAGR([fcf10CAGR, fcf05CAGR, fcf01CAGR], 1.2);
-
   let moat = {
-    type: 'moat',
+    type: '04-moat',
     symbol,
-    revenue10,
-    dilutedEPS10,
-    equity10,
-    fcf10,
-    revenueCAGRScore,
-    dilutedEPSCAGRScore,
-    equityCAGRScore,
-    fcfCAGRScore,
-    revenueIncreasingScore,
-    dilutedIncreasingScore,
-    equityIncreasingScore,
-    fcfSIncreasingcore,
+    references: [],
+    date: nowDateStr,
+    revenueAnalysis,
+    dilutedEPSAnalysis,
+    equityAnalysis,
+    fcfAnalysis,
     score:
-      revenueCAGRScore.totalScoreAdjusted +
-      dilutedEPSCAGRScore.totalScoreAdjusted +
-      equityCAGRScore.totalScoreAdjusted +
-      fcfCAGRScore.totalScoreAdjusted +
-      revenueIncreasingScore +
-      dilutedIncreasingScore +
-      equityIncreasingScore +
-      fcfSIncreasingcore
+      revenueAnalysis.score +
+      dilutedEPSAnalysis.score +
+      equityAnalysis.score +
+      fcfAnalysis.score
   };
 
-  console.log('Writing ', `${path}moat/${nowDateStr}.json`);
+  console.log('Writing ', `${path}/04-moat/${nowDateStr}.json`);
   try {
     fs.writeFileSync(
-      `${path}/moat/${nowDateStr}.json`,
+      `${path}/04-moat/${nowDateStr}.json`,
       JSON.stringify(moat, undefined, 4)
     );
   } catch (err) {
@@ -149,7 +113,6 @@ interface IScoreCAGR {
   weightAdjustment: number;
 
   totalScore: number;
-  totalScoreAdjusted: number;
 }
 
 function scoreCAGR(values: number[], weightAdjustment: number): IScoreCAGR {
@@ -162,9 +125,6 @@ function scoreCAGR(values: number[], weightAdjustment: number): IScoreCAGR {
   const fiveYearScore = Math.floor(val05 / 10);
   const oneYearScore = Math.floor(val01 / 10);
   const totalScore = Math.floor(tenYearScore + fiveYearScore + oneYearScore);
-  const totalScoreAdjusted = Math.floor(
-    (tenYearScore + fiveYearScore + oneYearScore) * weightAdjustment
-  );
 
   return {
     basis: [...values],
@@ -172,8 +132,7 @@ function scoreCAGR(values: number[], weightAdjustment: number): IScoreCAGR {
     tenYearScore,
     fiveYearScore,
     oneYearScore,
-    totalScore,
-    totalScoreAdjusted
+    totalScore
   };
 }
 
@@ -192,7 +151,7 @@ function scoreIncreasing(values: number[]): number {
   return score;
 }
 
-function lastNFromArray(n: number, values: number[]): number[] {
+function lastNFromArray<T>(n: number, values: T[]): T[] {
   return values.slice(-n);
 }
 
@@ -206,6 +165,116 @@ function add_values(values1: number[], values2: number[]): number[] {
     result = [...result, values1[i] + values2[i]];
   }
   return result;
+}
+
+interface IAnalysis {
+  description: string;
+  reference: string[];
+  redFlags: string[];
+  greenFlags: string[];
+
+  score: number;
+}
+interface IRevenueAnalysis extends IAnalysis {
+  periods: number[];
+  values: number[];
+  usableValues: number[];
+  usableValuesNotes: string;
+  weightAdjustment: number;
+  weightAdjustmentNotes: string;
+  firstValue: number;
+  midValue: number;
+  secondLastValue: number;
+  lastValue: number;
+  CAGR10Years: number;
+  CAGR5Years: number;
+  CAGRLastYear: number;
+  valuesIncreasingScoreNotes: string;
+  valuesIncreasingScore: number;
+  CAGRScore: IScoreCAGR;
+}
+
+function analyseCAGR(
+  type: string,
+  periods: number[],
+  values: number[],
+  weightAdjustment: number
+): IRevenueAnalysis {
+  // We have seen some situations where we get zero values.
+  // These need to be filtered out.
+  const usableValues = values.filter((x) => x !== 0);
+  const firstValue = usableValues[0];
+  const lastValue = usableValues[usableValues.length - 1];
+  const secondLastValue = usableValues[usableValues.length - 2];
+  const midValue = usableValues[Math.round(usableValues.length / 2 - 1)];
+
+  const CAGR10Years = cagr(firstValue, lastValue, usableValues.length);
+  const CAGR5Years = cagr(midValue, lastValue, usableValues.length / 2);
+  const CAGRLastYear = cagr(secondLastValue, lastValue, 2);
+  let redFlags: string[] = [];
+  let greenFlags: string[] = [];
+
+  if (usableValues.length !== 10) {
+    redFlags.push(
+      'Values have been filtered becuase they contian zero values. This is a less accurate result.'
+    );
+  }
+
+  const CAGRScore = scoreCAGR(
+    [CAGR10Years, CAGR5Years, CAGRLastYear],
+    weightAdjustment
+  );
+
+  const valuesIncreasingScore = scoreIncreasing(values) > 6 ? 1 : 0;
+  const score = Math.floor(
+    (CAGRScore.totalScore + valuesIncreasingScore) * weightAdjustment
+  );
+
+  return {
+    description: `${type} Scoring up and down in 10% intervals. We want at least 10%.`,
+    greenFlags,
+    redFlags,
+    reference: [],
+    periods,
+    values,
+    usableValues,
+    usableValuesNotes:
+      'Sometimes we get values that are zero, these need to be filtered out into usableValues.',
+    firstValue,
+    midValue: midValue,
+    secondLastValue,
+    lastValue,
+    weightAdjustment,
+    weightAdjustmentNotes:
+      'A weight adjustment is used to incread the score for the more important figures.',
+    CAGR10Years,
+    CAGR5Years,
+    CAGRLastYear,
+    valuesIncreasingScore,
+    valuesIncreasingScoreNotes:
+      'If there are over 6 years of increasing values, then a point is awarded',
+    CAGRScore,
+    score
+  };
+}
+
+// function cagr(start: number, end: number) {
+//   // CAGR = Compound Annual Growth Rate
+//   // https://www.investopedia.com/terms/c/cagr.asp
+//   return Math.round((Math.pow(end / start, 0.5) - 1) * 100);
+// };
+
+function cagr(start: number, end: number, number: number) {
+  // CAGR = Compound Annual Growth Rate
+  // https://www.investopedia.com/terms/c/cagr.asp
+  // http://fortmarinus.com/blog/1214/
+
+  const step1 = end - start + Math.abs(start);
+  const step2 = step1 / Math.abs(start);
+  const step3 = Math.pow(step2, 1 / number);
+  const step4 = (step3 - 1) * 100;
+
+  return Math.round(step4);
 }
 
 app();
