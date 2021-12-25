@@ -81,7 +81,15 @@ async function app() {
   let moat = {
     type: '04-moat',
     symbol,
-    references: [],
+    description:
+      'This estabishes if a company has a moat by looking backwards at key figures to see if the company has been running well and unintrupted by competitors.',
+    references: [
+      {
+        displayName:
+          'Section 3 - Competitive advantage; Step 2: Do the numbers agree?: 02:46',
+        url: 'https://profitful.online/courses/introduction-to-stock-analysis'
+      }
+    ],
     date: nowDateStr,
     revenueAnalysis,
     dilutedEPSAnalysis,
