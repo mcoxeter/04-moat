@@ -167,9 +167,14 @@ function add_values(values1: number[], values2: number[]): number[] {
   return result;
 }
 
+interface IReference {
+  displayName: string;
+  url: string;
+}
+
 interface IAnalysis {
   description: string;
-  reference: string[];
+  reference: IReference[];
   redFlags: string[];
   greenFlags: string[];
 
