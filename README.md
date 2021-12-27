@@ -31,7 +31,21 @@ This is an example of a config.json file:
 
 ```json
 {
-  "path": "C:/Business analysis/Evaluation"
+  "path": "C:/Business analysis"
+}
+```
+
+2. create an evaluate.json file in the 'path' folder.
+   This file can drive the evaluation list. The following is the structure of the file:
+
+```
+{
+  "evaluate": [
+    { "Symbol": "ADBE", "OverrideGrowth": 25 },
+    { "Symbol": "ATVI" },
+    { "Symbol": "BRK-B" },
+    { "Symbol": "CMG" },
+  ]
 }
 ```
 
@@ -41,11 +55,14 @@ This is an example of a config.json file:
 
 In this example the program will score the fundamental data on Facebook
 
-`npm start -- FB`
+`npm start`
+In this example the program will gather data of the symbols in the evaluate.json file
 
-In this example the program will gather data on Facebook and Adobe
+`npm start -- FB`
+In this example the program will score the fundamental data on Facebook
 
 `npm start -- FB ADBE`
+In this example the program will gather data on Facebook and Adobe
 
 ## Output
 

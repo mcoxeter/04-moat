@@ -5,13 +5,27 @@ const config = require('./config.json');
 async function app() {
   var myArgs = process.argv.slice(2);
 
+  if (myArgs.length === 0) {
+    // When no arguments are passed then we use the evaluate.json file as a list of stocks to evaluate.
+    const path = `${config.path}`;
+    const evaluationList = require(`${path}/evaluate.json`);
+
+    console.log('Evaluating stocks from evaluate.json');
+
+    for (const evaluate of evaluationList.evaluate) {
+      await evaluateStock(evaluate.Symbol);
+    }
+    return;
+  }
+
   for (const symbol of myArgs) {
     await evaluateStock(symbol);
   }
 }
 
 function evaluateStock(symbol: string): void {
-  const path = `${config.path}/${symbol}`;
+  console.log('Procesing stock ' + symbol);
+  const path = `${config.path}/Evaluation/${symbol}`;
 
   const requiredPaths = [path, `${path}/04-moat`];
   const nowDate = new Date();
@@ -34,9 +48,27 @@ function evaluateStock(symbol: string): void {
     .find(() => true);
 
   const stats = require(`${path}/01-data/${lastDataFile}`);
+  if (!stats.data.data.financials) {
+    write(`${path}/04-moat/${nowDateStr}.json`, {
+      type: '04-moat',
+      redFlags: ['Company not found'],
+      symbol,
+      date: nowDateStr,
+      rating: 0
+    });
+    return;
+  }
+
   const annual = stats.data.data.financials.annual;
   if (annual.revenue.length < 10) {
-    throw new Error('Company has not been reporting results for 10 years');
+    write(`${path}/04-moat/${nowDateStr}.json`, {
+      type: '04-moat',
+      redFlags: ['Company has not been reporting results for 10 years'],
+      symbol,
+      date: nowDateStr,
+      rating: 0
+    });
+    return;
   }
 
   const periods: number[] = lastNFromArray<string>(
@@ -107,16 +139,18 @@ function evaluateStock(symbol: string): void {
       fcfAnalysis.score
   };
 
-  console.log('Writing ', `${path}/04-moat/${nowDateStr}.json`);
+  write(`${path}/04-moat/${nowDateStr}.json`, moat);
+}
+
+function write(file: string, screen: any): void {
+  console.log(`Writing ${file}`);
   try {
-    fs.writeFileSync(
-      `${path}/04-moat/${nowDateStr}.json`,
-      JSON.stringify(moat, undefined, 4)
-    );
+    fs.writeFileSync(file, JSON.stringify(screen, undefined, 4));
   } catch (err) {
     console.error(err);
   }
 }
+
 interface IScoreCAGR {
   basis: number[];
   tenYearScore: number;
