@@ -4,8 +4,13 @@ const config = require('./config.json');
 
 async function app() {
   var myArgs = process.argv.slice(2);
-  const symbol = myArgs[0];
 
+  for (const symbol of myArgs) {
+    await evaluateStock(symbol);
+  }
+}
+
+function evaluateStock(symbol: string): void {
   const path = `${config.path}/${symbol}`;
 
   const requiredPaths = [path, `${path}/04-moat`];
@@ -112,7 +117,6 @@ async function app() {
     console.error(err);
   }
 }
-
 interface IScoreCAGR {
   basis: number[];
   tenYearScore: number;
